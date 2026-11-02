@@ -1,11 +1,185 @@
 # Flutter Animation Recipes
 
-Ready-to-build Flutter implementations for common motion patterns. Start from the recipe, then adapt it to the project's architecture and installed SDK—do not rebuild from scratch.
+Ready-to-build Flutter implementations for common motion patterns. Includes SDK-native patterns plus package-aware recipes for Motor and Flutter Animate. Start from the recipe, verify the resolved package API, and adapt to the project's architecture and installed SDK.
 
 **Skill:** [SKILL.md](SKILL.md)  
 **Compatibility:** Flutter 3.47.9 stable / Dart 3.13.7 and newer stable releases.
 
 Use the motion gates in `SKILL.md` before applying any recipe. These are patterns, not permission to animate every instance.
+
+---
+
+
+## Package recipes: choose by motion model
+
+These are package-specific patterns, not defaults. Apply the purpose/frequency gates in `SKILL.md` first. Confirm the project's resolved package version before copying code.
+
+### Motor — spring-driven target change
+
+**Purpose:** spatial consistency / state indication. Use when a target should settle with spring behavior or remain responsive to changing targets. Do not add Motor for a simple fade or color change.
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:motor/motor.dart';
+
+class SpringPositionDemo extends StatelessWidget {
+  const SpringPositionDemo({
+    super.key,
+    required this.offset,
+    required this.child,
+  });
+
+  final Offset offset;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return MotionBuilder<Offset>(
+      motion: CupertinoMotion.smooth(),
+      value: offset,
+      converter: OffsetMotionConverter(),
+      builder: (context, animatedOffset, child) {
+        return Transform.translate(
+          offset: animatedOffset,
+          child: child,
+        );
+      },
+      child: child,
+    );
+  }
+}
+```
+
+Use a documented `CupertinoMotion` or `MaterialSpringMotion` preset that matches the app. The example demonstrates target-driven spring motion; a true drag interaction must additionally track the pointer and preserve release velocity using the package's documented interactive/controller API for the resolved version.
+
+**Check:** change the target repeatedly before settling. Motion should retarget smoothly rather than restart from a stale position. Confirm the converter and constructor signatures against the installed Motor version.
+
+### Motor — multi-dimensional motion
+
+**Purpose:** spatial consistency. Use when multiple dimensions should have independent spring behavior, such as a draggable object settling differently on X and Y.
+
+```dart
+MotionBuilder<Offset>(
+  motion: MaterialSpringMotion.standardSpatialDefault(),
+  value: targetOffset,
+  converter: OffsetMotionConverter(),
+  builder: (context, offset, child) {
+    return Transform.translate(
+      offset: offset,
+      child: child,
+    );
+  },
+  child: card,
+)
+```
+
+Do not use this for ordinary layout transitions or for a single scalar that `AnimatedPositioned` / `AnimatedSlide` already handles.
+
+### Flutter Animate — concise entrance
+
+**Purpose:** preventing a jarring change. Use for occasional content appearance, not every rebuild or every row in a long list.
+
+```dart
+import 'package:flutter_animate/flutter_animate.dart';
+
+Widget buildCard() {
+  return Card(
+    child: const Padding(
+      padding: EdgeInsets.all(16),
+      child: Text('New content'),
+    ),
+  )
+      .animate()
+      .fadeIn(
+        duration: 180.ms,
+        curve: Curves.easeOut,
+      )
+      .slideY(
+        begin: 0.04,
+        end: 0,
+        duration: 180.ms,
+        curve: Curves.easeOut,
+      );
+}
+```
+
+Effects are composed in parallel by default. Keep the chain short and specify timing when it must match project motion tokens.
+
+### Flutter Animate — intentional sequence
+
+**Purpose:** explanation / occasional delight. Use only when the order itself communicates something.
+
+```dart
+Widget buildIntro() {
+  return const Text('Ready')
+      .animate()
+      .fadeIn(duration: 160.ms, curve: Curves.easeOut)
+      .then(delay: 80.ms)
+      .scale(
+        begin: const Offset(0.97, 0.97),
+        end: const Offset(1, 1),
+        duration: 180.ms,
+        curve: Curves.easeOut,
+      );
+}
+```
+
+Use `then()` to establish a sequential baseline. Without it, effect chains generally overlap in time. Avoid long choreographies that delay interaction.
+
+### Flutter Animate — staggered group
+
+**Purpose:** preventing a jarring change. Use for a small, finite group in an occasional screen entrance. Avoid on frequently revisited or large virtualized lists.
+
+```dart
+Column(
+  children: items
+      .map<Widget>((item) => ItemTile(item: item))
+      .toList()
+      .animate(interval: 45.ms)
+      .fadeIn(duration: 160.ms, curve: Curves.easeOut)
+      .slideY(
+        begin: 0.035,
+        end: 0,
+        duration: 160.ms,
+        curve: Curves.easeOut,
+      ),
+)
+```
+
+The list extension returns an `AnimateList`; apply `.animate(interval: ...)` to the widget list, then chain the effects. For dynamic or lazily built collections, verify how the package wraps children and avoid applying this to a large virtualized list. Keep stagger count and total entrance time bounded; preserve immediate access to content and respect reduced motion.
+
+### Reduced motion with package effects
+
+Package animations must obey the app's accessibility policy. For stateful widgets, gate the effect configuration using `MediaQuery.of(context).disableAnimations` and render the child directly or use a brief opacity-only change when motion is disabled.
+
+```dart
+Widget buildMotionAwareCard(BuildContext context, Widget child) {
+  if (MediaQuery.of(context).disableAnimations) {
+    return child;
+  }
+
+  return child
+      .animate()
+      .fadeIn(duration: 160.ms, curve: Curves.easeOut)
+      .slideY(begin: 0.03, end: 0);
+}
+```
+
+Do not rely on package defaults to infer the app's reduced-motion requirements. Also verify `accessibleNavigation` when motion is part of navigation or interaction.
+
+### Package recipe review checklist
+
+- [ ] Package is justified by the motion model, not merely convenience.
+- [ ] Resolved version and API signatures are verified.
+- [ ] Effect purpose and frequency pass the gates in `SKILL.md`.
+- [ ] Curves/durations use project tokens or explicit approved values.
+- [ ] Effects do not restart unexpectedly on rebuild.
+- [ ] Dynamic/lazy lists are bounded and do not animate every recycled row.
+- [ ] Repeating effects stop when offscreen or irrelevant.
+- [ ] Reduced motion disables nonessential movement and loops.
+- [ ] Gesture-driven Motor motion tracks the finger and hands off velocity.
+- [ ] Shader/blur/clip effects are profiled on target hardware when costly.
+- [ ] Package use does not duplicate existing Flutter or project motion primitives.
 
 ---
 
